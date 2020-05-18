@@ -1,6 +1,6 @@
 import React, { Fragment, useEffect, useState, useRef } from "react"; //useEffect, useState
-import P2P from "socket.io-p2p";
-import io from "socket.io-client";
+import Capture from "Utils/Capture";
+const { isScreenCapturingSupported, screenCapture } = Capture;
 
 // import { getDesktop } from "./desktopCapture";
 // const electron = window.require("electron");
@@ -9,105 +9,45 @@ import io from "socket.io-client";
 // import ReactPlayer from "react-player";
 // import Player from "video-react";
 
-const Screen = () => {
+const Screen = ({ socket }) => {
   const [source, setSource] = useState(false);
   const [count, setCount] = useState(0);
-  const [sock, setSock] = useState(false);
   const videoTag = useRef();
+  let pc;
+  const start = (isCaller) => {
+    // run start(true) to initiate a call
 
-  const socketConnect = () => {
-    const socket = io("//127.0.0.1:5000");
-    setSock(socket);
-    if (socket) {
-      console.log("socket connection:", socket);
-      socket.on("stream", (data) => {
-        setSource(data);
-        videoTag.current.srcObject = data;
-      });
-    }
-    // const p2p = new P2P(socket);
-    // var p2psocket = new P2P(socket, opts)
-    /*
-    const opts = { numClients: 10 }; // connect up to 10 clients at a time
-    const p2p = new P2P(socket, opts, () => {
-      console.log("We all speak WebRTC now");
-    });
-    if (p2p) {
-      p2p.on("peer-msg", function (data) {
-        console.log("From a peer %s", data);
-      });
-      p2p.on("go-private", function () {
-        p2p.upgrade(); // upgrade to peerConnection
-      });
-      p2p.on("stream", (data) => {
-        setSource(data);
-        videoTag.current.srcObject = data;
-      });
-      
-    }
-    */
-  };
+    // send any ice candidates to the other peer
+    pc = new RTCPeerConnection(); // iceServer config
+    pc.onicecandidate = (evt) => {
+      console.log("onicecandidate");
+      socket.emit("candidate", JSON.stringify({ candidate: evt.candidate }));
+    };
 
-  const getScreenStream = async (callback) => {
-    if (!!navigator.getDisplayMedia) {
-      console.log("navigator.getDisplayMedia");
-      await navigator
-        .getDisplayMedia({
-          video: true,
-          audio: true,
-        })
-        .then((screenStream) => {
-          callback(screenStream);
-        });
-    } else if (!!navigator.mediaDevices.getDisplayMedia) {
-      console.log("navigator.mediaDevices.getDisplayMedia");
-      await navigator.mediaDevices
-        .getDisplayMedia({
-          video: true,
-          audio: true,
-        })
-        .then((screenStream) => {
-          callback(screenStream);
-        });
-    } else {
-      getScreenId(async (error, sourceId, screen_constraints) => {
-        await navigator.mediaDevices
-          .getUserMedia(screen_constraints)
-          .then((screenStream) => {
-            callback(screenStream);
-          });
-      });
-    }
-  };
-  const getScreenId = (error, sourceId, screen_constraints) => {
-    navigator.getUserMedia =
-      navigator.mozGetUserMedia ||
-      navigator.webkitGetUserMedia ||
-      navigator.getUserMedia ||
-      navigator.msgGetUserMedia;
+    // once remote stream arrives, show it in the remote video element
+    pc.onaddstream = (evt) => {
+      console.log("onaddstream");
+      videoTag.current.srcObject = evt.stream;
+      //videoTag.src = URL.createObjectURL(evt.stream);
+    };
 
-    navigator.getUserMedia(
-      screen_constraints,
-      (stream) => {
-        // document.querySelector("video").src = URL.createObjectURL(stream);
-        setSource(stream);
-        videoTag.current.srcObject = stream;
-      },
-      (error) => {
-        console.error(error);
-        alert(error);
+    // get the local stream, show it in the local video element and send it
+    screenCapture(session, (stream) => {
+      // selfView.src = URL.createObjectURL(stream);
+      pc.addStream(stream);
+
+      if (isCaller) pc.createOffer(gotDescription);
+      else pc.createAnswer(pc.remoteDescription, gotDescription);
+
+      function gotDescription(desc) {
+        pc.setLocalDescription(desc);
+        // signalingChannel.send(JSON.stringify({ "sdp": desc }));
+        socket.emit("sdp", JSON.stringify({ sdp: desc }));
       }
-    );
+    });
   };
 
-  const hasGetUserMedia = () => {
-    return !!(
-      navigator.getUserMedia ||
-      navigator.webkitGetUserMedia ||
-      navigator.mozGetUserMedia ||
-      navigator.msGetUserMedia
-    );
-  };
+  /*
   const displayConstraints = {
     video: {
       frameRate: 60,
@@ -122,89 +62,39 @@ const Screen = () => {
       noiseSuppression: true,
     },
   };
-  const getDisplay = async (cb) => {
-    const stream = await navigator.mediaDevices
-      .getDisplayMedia({
-        video: displayConstraints.video,
-        audio: displayConstraints.audio,
-      })
-      .catch(async () => {
-        // getDesktop(cb);
-        return getScreenStream(cb);
-        // alert("Couldn't get Screen");
-      });
-    // const videoTrack = stream.getVideoTracks();
-    // console.log(videoTrack);
-    cb(stream);
-  };
-  /*
-  // electron desktopCapturer
-  const getDesktop = (cb) => {
-    desktopCapturer
-      .getSources({ types: ["screen", "window"] }) //"window", "screen", "tap"
-      .then(async (sources) => {
-        // for (const src of sources) {
-        for (const [idx, src] of sources.entries()) {
-          console.log(
-            `%c${
-              Object.entries(src)
-                .reduce((a, e) => {
-                  if (typeof e[1] != "function") {
-                    a += `"${e[0]}" : "${e[1]}", `;
-                  }
-                  return a;
-                }, "`{")
-                .slice(1, -2) + "}`"
-            }`,
-            "color:black;font-family:system-ui;-webkit-text-stroke: 1px orange;font-weight:bold"
-          );
-          // if (src.name === "Electron" || src.name === "Entire Screen") {
-          if (idx === count) {
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                  mandatory: {
-                    chromeMediaSource: "desktop",
-                    chromeMediaSourceId: src.id, //
-                    minWidth: 1280, // size
-                    maxWidth: 1280,
-                    minHeight: 720,
-                    maxHeight: 720,
-                    maxFrameRate: 60, // fps
-                    minFrameRate: 1, //
-                  },
-                },
-                audio: false,
-              });
-              cb(stream);
-              //   setSource(stream);
-              //   tag.current.srcObject = stream;
-              // handleStream(stream);
-            } catch (e) {
-              console.log(e);
-            }
-            // return;
-          }
-        }
-      });
-  };
   */
+  const screen_constraints = {
+    mandatory: {
+      chromeMediaSource: "screen",
+      minWidth: 1920,
+      maxWidth: 1920,
+      minHeight: 1080,
+      maxHeight: 1080,
+      minAspectRatio: 1.77,
+      maxFrameRate: 15,
+    },
+    optional: [],
+  };
+  const session = {
+    audio: false,
+    video: screen_constraints,
+  };
+
   const getScreen = () => {
     if (source) stop();
-    try {
-      // getScreenStream((stream) => {
-      getDisplay((stream) => {
-        // const video = document.querySelector("video");
-        // video.srcObject = stream;
-        console.log("screen stream:", stream);
-        if (stream) {
-          setSource(stream);
-          videoTag.current.srcObject = stream;
-        }
-        // setSource(true);
-      });
-    } catch {
-      alert("화면을 가져올 수 없습니다.");
+    if (isScreenCapturingSupported) {
+      try {
+        screenCapture(session, (stream) => {
+          console.log("screen stream:", stream);
+          if (stream) {
+            setSource(stream);
+            videoTag.current.srcObject = stream;
+          }
+        });
+      } catch (err) {
+        console.log(err);
+        alert("화면을 가져올 수 없습니다.");
+      }
     }
   };
   const stop = () => {
@@ -212,68 +102,37 @@ const Screen = () => {
     source.getTracks().forEach((track) => track.stop());
     setSource(false);
   };
-  const camConstraints = {
-    video: {
-      width: { min: 1080, ideal: 1920 },
-      height: { min: 720, ideal: 1280 },
-      // optional: [{ frameRate: 60 }, { facingMode: "user" }],
-    },
-    audio: {
-      sampleSize: 8, // 샘플 byte 단위
-      echoCancellation: true,
-      noiseSuppression: true,
-    },
-  };
-
-  const getCam = () => {
-    if (source) stop();
-    if (hasGetUserMedia()) {
-      navigator.mediaDevices
-        .getUserMedia({
-          video: camConstraints.video,
-          audio: camConstraints.audio,
-        })
-        .then((mediaStream) => {
-          /*
-          var video = document.querySelector("video");
-          video.srcObject = mediaStream;
-          video.onloadedmetadata = function (e) {
-            video.play();
-          };
-          */
-          setSource(mediaStream);
-          videoTag.current.srcObject = mediaStream;
-        })
-        .catch(function (err) {
-          console.log(err.name + ": " + err.message);
-        }); // always check for errors at the end.
-    } else {
-      alert("카메라를 찾을 수 없습니다.");
-    }
-  };
-  const getLocation = () => {
-    navigator.geolocation.getCurrentPosition((position) => {
-      console.log(position);
-      // setLocation(position);
-    });
-  };
   useEffect(() => {
-    socketConnect();
     if (source) {
+      // 화면공유 중지 시
       source.getVideoTracks()[0].onended = (e) => {
         //oninactive , onended
         console.log(e);
         stop();
-        alert("화면 공유를 중지하였습니다.");
+        // alert("화면 공유를 중지하였습니다.");
+        console.log("ScreenSharing Stopped");
       };
     }
+    if (socket) {
+      socket.on("message", (evt) => {
+        if (!pc) {
+          start(false);
+          let signal = JSON.parse(evt.data);
+          if (signal.sdp)
+            pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          else pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        }
+      });
+    }
   });
+
   return (
     <div>
       <Fragment>
         <input
+          type="number"
           onChange={(e) => {
-            setCount(parseInt(e.target.value));
+            setCount(Math.abs(parseInt(e.target.value)));
           }}
           value={count}
           placeholder="select screen number"
@@ -281,7 +140,6 @@ const Screen = () => {
       </Fragment>
       <Fragment>
         <button onClick={getScreen}>getScreen</button>
-        <button onClick={getCam}>getCam</button>
         {!!source && <button onClick={stop}>stop</button>}
       </Fragment>
 
@@ -305,6 +163,7 @@ const Screen = () => {
             width={!!source ? "100%" : "0%"}
             style={{
               scale: 2, //transform: "rotate(20deg)"
+              // filter: "blur(0px) invert(0) opacity(1)",  //"blur(4px) invert(1) opacity(0.5)"
             }}
             onClick={(e) => {
               e.preventDefault();
@@ -327,7 +186,14 @@ const Screen = () => {
           />
         </div>
       )}
-      {/* <ReactPlayer url={source} autoPlay /> */}
+
+      <video id="localVideo" autoplay playsinline></video>
+      <video id="remoteVideo" autoplay playsinline></video>
+      <div>
+        <button id="startButton">Start</button>
+        <button id="callButton">Call</button>
+        <button id="hangupButton">Hang Up</button>
+      </div>
     </div>
   );
 };

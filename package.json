@@ -2,34 +2,27 @@
   "name": "rtc_test",
   "version": "0.1.0",
   "private": true,
-  "description": "webrtc electron example",
-  "author": "AUTHOR",
-  "main": "public/electron.js",
-  "homepage": "./",
+  "description": "webrtc screen share example",
   "proxy": "http://localhost:5000",
   "dependencies": {
     "@testing-library/jest-dom": "^4.2.4",
     "@testing-library/react": "^9.3.2",
     "@testing-library/user-event": "^7.1.2",
-    "electron-is-dev": "^1.2.0",
+    "bootstrap": "^4.5.0",
     "express": "^4.17.1",
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
-    "react-player": "^2.0.0",
+    "react-router-dom": "^5.2.0",
     "react-scripts": "3.4.1",
+    "reactstrap": "^8.4.1",
     "socket.io-client": "^2.3.0",
-    "socket.io-p2p": "^2.2.0",
-    "typescript": "^3.8.3",
-    "video-react": "^0.14.1"
+    "webrtc-adapter": "^7.6.0"
   },
   "scripts": {
-    "react-start": "react-scripts start",
-    "react-build": "react-scripts build",
+    "start": "set HTTPS=true&&cross-env NODE_PATH=src react-scripts start",
+    "build": "cross-env NODE_PATh=src react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "start": "concurrently \"cross-env BROWSER=none yarn react-start\" \"wait-on http://localhost:3000 && electron .\"",
-    "build": "yarn react-build && electron-builder",
-    "release": "yarn react-build && electron-builder --publish=always"
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": "react-app"
@@ -47,10 +40,6 @@
     ]
   },
   "devDependencies": {
-    "concurrently": "^5.2.0",
-    "cross-env": "^7.0.2",
-    "electron": "^8.2.5",
-    "electron-builder": "^22.6.0",
-    "wait-on": "^5.0.0"
+    "cross-env": "^7.0.2"
   }
 }
