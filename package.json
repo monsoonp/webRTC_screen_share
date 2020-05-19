@@ -19,10 +19,11 @@
     "webrtc-adapter": "^7.6.0"
   },
   "scripts": {
-    "start": "set HTTPS=true&&cross-env NODE_PATH=src react-scripts start",
+    "start": "cross-env NODE_PATH=src react-scripts start",
     "build": "cross-env NODE_PATh=src react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "server": "cd server && nodemon server.js"
   },
   "eslintConfig": {
     "extends": "react-app"

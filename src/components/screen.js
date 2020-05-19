@@ -1,5 +1,7 @@
 import React, { Fragment, useEffect, useState, useRef } from "react"; //useEffect, useState
 import Capture from "Utils/Capture";
+
+import { ButtonGroup, Button, Card, CardBody, CardHeader } from "reactstrap";
 const { isScreenCapturingSupported, screenCapture } = Capture;
 
 // import { getDesktop } from "./desktopCapture";
@@ -11,14 +13,36 @@ const { isScreenCapturingSupported, screenCapture } = Capture;
 
 const Screen = ({ socket }) => {
   const [source, setSource] = useState(false);
-  const [count, setCount] = useState(0);
+  const [users, setUsers] = useState([]);
   const videoTag = useRef();
-  let pc;
+
+  // const { RTCPeerConnection, RTCSessionDescription } = window;
+  const peerConnection = new RTCPeerConnection();
+
+  //redux를 이용 할것
+  let isAlreadyCalling = false;
+
+  peerConnection.ontrack = ({ streams: [stream] }) => {
+    // remote-video
+    /*
+    if (remoteTag) {
+      remoteTag.current.srcObject = stream;
+    }
+    */
+    const remoteVideo = document.querySelector(".remote-video");
+    if (remoteVideo) {
+      remoteVideo.srcObject = stream;
+    }
+  };
+  /*
+  let pc; // peer connection
   const start = (isCaller) => {
     // run start(true) to initiate a call
 
     // send any ice candidates to the other peer
-    pc = new RTCPeerConnection(); // iceServer config
+    // pc = new RTCPeerConnection("http://127.0.0.1:5000"); // iceServer config
+    pc = new peerConnection();
+
     pc.onicecandidate = (evt) => {
       console.log("onicecandidate");
       socket.emit("candidate", JSON.stringify({ candidate: evt.candidate }));
@@ -45,7 +69,17 @@ const Screen = ({ socket }) => {
         socket.emit("sdp", JSON.stringify({ sdp: desc }));
       }
     });
-  };
+     
+    
+    
+    // main.js
+    // let localPeerConnection;
+    // localPeerConnection = new RTCPeerConnection();  //servers
+    // localPeerConnection.addEventListener('icecandidate', handleConnection);
+    // localPeerConnection.addEventListener(
+    //   'iceconnectionstatechange', handleConnectionChange);
+    // };
+     */
 
   /*
   const displayConstraints = {
@@ -71,7 +105,7 @@ const Screen = ({ socket }) => {
       minHeight: 1080,
       maxHeight: 1080,
       minAspectRatio: 1.77,
-      maxFrameRate: 15,
+      maxFrameRate: 5,
     },
     optional: [],
   };
@@ -83,24 +117,60 @@ const Screen = ({ socket }) => {
   const getScreen = () => {
     if (source) stop();
     if (isScreenCapturingSupported) {
-      try {
-        screenCapture(session, (stream) => {
+      screenCapture(
+        session,
+        (stream) => {
           console.log("screen stream:", stream);
-          if (stream) {
-            setSource(stream);
-            videoTag.current.srcObject = stream;
+
+          /*
+          setSource(stream);
+          videoTag.current.srcObject = stream;
+          localTag.current.srcObject = stream;
+          */
+          const localVideo = document.querySelector(".local-video");
+          if (localVideo) {
+            // localVideo.srcObject = stream;
+            videoTag.srcObject = stream;
           }
-        });
-      } catch (err) {
-        console.log(err);
-        alert("화면을 가져올 수 없습니다.");
-      }
+
+          // p2p stream
+          stream
+            .getTracks()
+            .forEach((track) => peerConnection.addTrack(track, stream));
+        },
+        (err) => {
+          console.warn(err);
+          alert("화면을 가져오는 과정에서 오류가 발생하였습니다.");
+        }
+      );
+    } else {
+      alert("화면을 가져올 수 없습니다. (미지원)");
     }
   };
   const stop = () => {
     // videoTag.current.srcObject = null;
     source.getTracks().forEach((track) => track.stop());
     setSource(false);
+  };
+
+  // 특정 유저와 p2p 연결하기
+  const callUser = async (socketId) => {
+    const offer = await peerConnection.createOffer();
+    /*  // updateCodec - modify sdp function / createAnswer도 같이 추가할 것
+    .then(function(offer) {
+      const sdp = offer.sdp;
+      const changedsdp = updateCodec(sdp) //Function to modify the sdp
+      offer.sdp = changedsdp
+
+      peerConnection.setLocalDescription(offer)})
+      */
+    await peerConnection.setLocalDescription(new RTCSessionDescription(offer));
+    // console.log("callUser:", socketId, offer);
+
+    socket.emit("call-user", {
+      offer,
+      to: socketId,
+    });
   };
   useEffect(() => {
     if (source) {
@@ -114,6 +184,8 @@ const Screen = ({ socket }) => {
       };
     }
     if (socket) {
+      console.log("socketId:", socket.id);
+      /*
       socket.on("message", (evt) => {
         if (!pc) {
           start(false);
@@ -123,31 +195,95 @@ const Screen = ({ socket }) => {
           else pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
         }
       });
+      */
+      // 자신 이외 소켓 목록
+      socket.on("update-user-list", (data) => {
+        setUsers([...users, ...data.users]);
+      });
+      // 연결 해제된 소켓
+      socket.on("remove-user", ({ socketId }) => {
+        const list = users.filter((socket) => socket !== socketId);
+        setUsers(list);
+      });
+      // 타 유저와 peer 연결요청 받음 (- signaling server)
+      socket.on("call-made", async (data) => {
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(data.offer)
+        );
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(
+          new RTCSessionDescription(answer)
+        );
+
+        // 요청 응답
+        socket.emit("make-answer", {
+          answer,
+          to: data.socket,
+        });
+      });
+      socket.on("answer-made", async (data) => {
+        console.log("answer-made");
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(data.answer)
+        );
+
+        if (!isAlreadyCalling) {
+          callUser(data.socket);
+          isAlreadyCalling = true;
+        }
+
+        // callUser(data.socket);
+      });
     }
+
+    return () => {
+      if (socket) {
+        // socket.off("message");
+        socket.off("update-user-list");
+        socket.off("remove-user");
+        socket.off("call-made");
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   });
 
   return (
     <div>
       <Fragment>
-        <input
-          type="number"
-          onChange={(e) => {
-            setCount(Math.abs(parseInt(e.target.value)));
-          }}
-          value={count}
-          placeholder="select screen number"
-        />
-      </Fragment>
-      <Fragment>
-        <button onClick={getScreen}>getScreen</button>
+        <Button className="bg-primary" onClick={getScreen}>
+          getScreen
+        </Button>
         {!!source && <button onClick={stop}>stop</button>}
       </Fragment>
 
-      {!!source && (
+      <Fragment>
+        <Card outline color="primary">
+          <CardHeader>User List</CardHeader>
+          <CardBody>
+            <ButtonGroup>
+              {users.length !== 0 &&
+                users.map((user, index) => (
+                  <Button
+                    key={index}
+                    color="primary"
+                    outline
+                    onClick={() => callUser(user)}
+                    size="sm"
+                  >
+                    {user}
+                  </Button>
+                ))}
+            </ButtonGroup>
+          </CardBody>
+        </Card>
+      </Fragment>
+
+      {
         <div>
           <video
             title="Screen Share"
             id="video"
+            className="local-video remote-video"
             // ref={(video) => {
             //   if (!!source) {
             //     video.srcObject = source;
@@ -155,12 +291,12 @@ const Screen = ({ socket }) => {
             // }}
             ref={videoTag}
             // src={source}
-            autoPlay={true}
+            autoPlay
             playsInline
-            controls
+            // controls
             preload="metadata"
-            height={!!source ? "50%" : "0%"}
-            width={!!source ? "100%" : "0%"}
+            // height={!!source ? "50%" : "0%"}
+            // width={!!source ? "100%" : "0%"}
             style={{
               scale: 2, //transform: "rotate(20deg)"
               // filter: "blur(0px) invert(0) opacity(1)",  //"blur(4px) invert(1) opacity(0.5)"
@@ -174,6 +310,7 @@ const Screen = ({ socket }) => {
               }
             }}
             onDoubleClick={(e) => {
+              console.log(e.target);
               if (!e.target.fullscreenElement) {
                 console.log("fullscreen");
                 e.target.requestFullscreen();
@@ -185,15 +322,21 @@ const Screen = ({ socket }) => {
             }}
           />
         </div>
-      )}
-
-      <video id="localVideo" autoplay playsinline></video>
-      <video id="remoteVideo" autoplay playsinline></video>
-      <div>
-        <button id="startButton">Start</button>
-        <button id="callButton">Call</button>
-        <button id="hangupButton">Hang Up</button>
-      </div>
+      }
+      <hr />
+      <Fragment>
+        {/* p2p 통실할 영상 */}
+        <video autoPlay playsInline></video>
+        {/* 받은 영상 */}
+        {/* <video class="remote-video" autoPlay playsInline></video> */}
+        {/* 
+        <div>
+          <button id="startButton">Start</button>
+          <button id="callButton">Call</button>
+          <button id="hangupButton">Hang Up</button>
+        </div>
+         */}
+      </Fragment>
     </div>
   );
 };

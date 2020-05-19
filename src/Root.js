@@ -4,7 +4,7 @@ import io from "socket.io-client";
 
 import Main from "shared/Main";
 import adapter from "webrtc-adapter";
-
+// require("webrtc-adapter");
 // import socketClient from "socket.io-client";
 
 // package.json
@@ -16,11 +16,13 @@ function Root() {
   if (process.env.PUBLIC_URL) {
     pathAddress = process.env.PUBLIC_URL;
   } else {
-    pathAddress = "http://127.0.0.1:5000";
+    pathAddress = "http://192.168.0.38:5000";
   }
-  const socket = io(pathAddress, { transports: ["websocket"] });
+
+  const socket = io(pathAddress, { transports: ["websocket"], upgrade: false });
 
   useEffect(() => {
+    console.log(adapter.browserDetails);
     if (socket) {
       console.log("socket connected");
     }

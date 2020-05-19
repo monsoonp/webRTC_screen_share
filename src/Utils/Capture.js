@@ -30,6 +30,7 @@ const Captrue = () => {
       console.log("screen capture: navigator.mediaDevices.getDisplayMedia");
       await navigator.mediaDevices
         .getDisplayMedia({
+          // await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         })
