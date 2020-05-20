@@ -9,7 +9,7 @@ const Main = ({ socket }) => {
   return (
     <Switch>
       <Route
-        path={[`/home`, `/Screen-Share`]}
+        path={[`/`, `/home`, `/Screen-Share`]}
         render={(props) => (
           <Screen
             {...props}

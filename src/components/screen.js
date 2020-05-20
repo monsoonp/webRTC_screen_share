@@ -1,7 +1,16 @@
 import React, { Fragment, useEffect, useState, useRef } from "react"; //useEffect, useState
 import Capture from "Utils/Capture";
 
-import { ButtonGroup, Button, Card, CardBody, CardHeader } from "reactstrap";
+import {
+  ButtonGroup,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Badge,
+  Breadcrumb,
+  BreadcrumbItem,
+} from "reactstrap";
 const { isScreenCapturingSupported, screenCapture } = Capture;
 
 // import { getDesktop } from "./desktopCapture";
@@ -33,6 +42,7 @@ const Screen = ({ socket }) => {
     if (remoteVideo) {
       remoteVideo.srcObject = stream;
     }
+    setSource(stream);
   };
   /*
   let pc; // peer connection
@@ -115,13 +125,13 @@ const Screen = ({ socket }) => {
   };
 
   const getScreen = () => {
-    if (source) stop();
+    // if (source) stop();
     if (isScreenCapturingSupported) {
       screenCapture(
         session,
         (stream) => {
-          console.log("screen stream:", stream);
-
+          // console.log("screen stream:", stream);
+          setSource(stream);
           /*
           setSource(stream);
           videoTag.current.srcObject = stream;
@@ -129,8 +139,7 @@ const Screen = ({ socket }) => {
           */
           const localVideo = document.querySelector(".local-video");
           if (localVideo) {
-            // localVideo.srcObject = stream;
-            videoTag.srcObject = stream;
+            localVideo.srcObject = stream;
           }
 
           // p2p stream
@@ -155,6 +164,7 @@ const Screen = ({ socket }) => {
 
   // 특정 유저와 p2p 연결하기
   const callUser = async (socketId) => {
+    isAlreadyCalling = true;
     const offer = await peerConnection.createOffer();
     /*  // updateCodec - modify sdp function / createAnswer도 같이 추가할 것
     .then(function(offer) {
@@ -172,9 +182,14 @@ const Screen = ({ socket }) => {
       to: socketId,
     });
   };
+  let onMsg = (msg) => {
+    console.log(msg);
+  };
   useEffect(() => {
+    /*
     if (source) {
       // 화면공유 중지 시
+
       source.getVideoTracks()[0].onended = (e) => {
         //oninactive , onended
         console.log(e);
@@ -183,6 +198,7 @@ const Screen = ({ socket }) => {
         console.log("ScreenSharing Stopped");
       };
     }
+    */
     if (socket) {
       console.log("socketId:", socket.id);
       /*
@@ -207,6 +223,7 @@ const Screen = ({ socket }) => {
       });
       // 타 유저와 peer 연결요청 받음 (- signaling server)
       socket.on("call-made", async (data) => {
+        console.log(`call-made from "${data.socket}"`);
         await peerConnection.setRemoteDescription(
           new RTCSessionDescription(data.offer)
         );
@@ -221,6 +238,7 @@ const Screen = ({ socket }) => {
           to: data.socket,
         });
       });
+      // 요청에 대한 응답받음
       socket.on("answer-made", async (data) => {
         console.log("answer-made");
         await peerConnection.setRemoteDescription(
@@ -229,7 +247,7 @@ const Screen = ({ socket }) => {
 
         if (!isAlreadyCalling) {
           callUser(data.socket);
-          isAlreadyCalling = true;
+          // isAlreadyCalling = true;
         }
 
         // callUser(data.socket);
@@ -239,13 +257,15 @@ const Screen = ({ socket }) => {
     return () => {
       if (socket) {
         // socket.off("message");
-        socket.off("update-user-list");
-        socket.off("remove-user");
-        socket.off("call-made");
+        socket.off("update-user-list", onMsg);
+        socket.off("remove-user", onMsg);
+        socket.off("call-made", onMsg);
+        socket.off("answer-made", onMsg);
       }
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  });
+  }, [socket, users, source]);
 
   return (
     <div>
@@ -258,7 +278,16 @@ const Screen = ({ socket }) => {
 
       <Fragment>
         <Card outline color="primary">
-          <CardHeader>User List</CardHeader>
+          <CardHeader className="p-0 m-0">
+            <Breadcrumb>
+              <BreadcrumbItem>User List </BreadcrumbItem>
+              {!!socket && (
+                <BreadcrumbItem>
+                  <Badge color="success">{socket.id}</Badge>
+                </BreadcrumbItem>
+              )}
+            </Breadcrumb>
+          </CardHeader>
           <CardBody>
             <ButtonGroup>
               {users.length !== 0 &&
@@ -277,8 +306,8 @@ const Screen = ({ socket }) => {
           </CardBody>
         </Card>
       </Fragment>
-
-      {
+      {!!source && `source : ${!!source}`}
+      {!!source && (
         <div>
           <video
             title="Screen Share"
@@ -322,7 +351,7 @@ const Screen = ({ socket }) => {
             }}
           />
         </div>
-      }
+      )}
       <hr />
       <Fragment>
         {/* p2p 통실할 영상 */}

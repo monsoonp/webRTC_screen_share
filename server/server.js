@@ -4,9 +4,9 @@ const server = require("http").createServer(app);
 const io = require("socket.io")(server, { transports: ["websocket"] });
 const port = process.env.PORT || 5000;
 
-const path = require("path");
+// const path = require("path");
 
-app.use(express.json()); // http api - json 허용 // express 빌트인 body-parser - post requestr의 data 추출
+app.use(express.json()); // http api - json 허용 // express 빌트인 body-parser - post request의 data 추출
 
 // server side rendering
 /*
@@ -62,6 +62,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("make-answer", (data) => {
+    // 요청에 대한 응답
     socket.to(data.to).emit("answer-made", {
       socket: socket.id,
       answer: data.answer,
@@ -84,6 +85,7 @@ io.on("connection", (socket) => {
     socket.broadcast.emit("remove-user", {
       socketId: socket.id,
     });
+    socket.removeAllListeners();
   });
 
   socket.on("error", (err) => {

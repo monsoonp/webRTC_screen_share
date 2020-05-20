@@ -19,7 +19,11 @@ function Root() {
     pathAddress = "http://192.168.0.38:5000";
   }
 
-  const socket = io(pathAddress, { transports: ["websocket"], upgrade: false });
+  const socket = io(pathAddress, {
+    transports: ["websocket"],
+    upgrade: false,
+    // reconnection: false,
+  });
 
   useEffect(() => {
     console.log(adapter.browserDetails);
